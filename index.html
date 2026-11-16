@@ -1,0 +1,28 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>План</title>
+<style>body{font:17px/1.5 system-ui,sans-serif;margin:12vh auto;max-width:420px;padding:0 20px;color:#1d2327;background:#f6f4ef}
+input,button{font:inherit;padding:10px 12px;border-radius:10px;border:1px solid #bbb;width:100%;box-sizing:border-box;margin-top:10px}
+button{background:#2f6f5e;color:#fff;border:0}</style></head><body>
+<p id="m">Загрузка…</p>
+<form id="f" hidden><input id="k" placeholder="Ключ или ссылка с ключом" autocomplete="off"><button>Открыть</button></form>
+<script>
+(()=>{
+const m=document.getElementById('m'),f=document.getElementById('f');
+const page=(new URLSearchParams(location.search).get('p')||'plan').replace(/[^a-z]/g,'');
+const b64=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+function ask(t){m.textContent=t;f.hidden=false;}
+async function open(k){
+ try{const key=await crypto.subtle.importKey('raw',b64(k),'AES-GCM',false,['decrypt']);
+  const r=await fetch(page+'.bin',{cache:'no-cache'});if(!r.ok)throw new Error('net');
+  const b=new Uint8Array(await r.arrayBuffer());
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b.subarray(0,12)},key,b.subarray(12));
+  try{localStorage.setItem('plankey',k)}catch(e){}
+  const html=new TextDecoder().decode(pt);document.open();document.write(html);document.close();
+ }catch(e){ask(e.message==='net'?'Не удалось загрузить страницу: проверьте интернет.':'Ключ не подошёл. Откройте полную ссылку с ключом или вставьте ключ.');}
+}
+f.onsubmit=e=>{e.preventDefault();const v=document.getElementById('k').value.trim();const k=(v.match(/k=([\w-]{40,})/)||[,v])[1];f.hidden=true;m.textContent='Загрузка…';open(k);};
+let k=(location.hash.match(/k=([\w-]{40,})/)||[])[1];
+if(!k){try{k=localStorage.getItem('plankey')}catch(e){}}
+if(k)open(k);else ask('Нужен ключ: откройте полную ссылку с ключом или вставьте его сюда.');
+})();
+</script></body></html>
