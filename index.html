@@ -11,18 +11,26 @@ const m=document.getElementById('m'),f=document.getElementById('f');
 const page=(new URLSearchParams(location.search).get('p')||'plan').replace(/[^a-z]/g,'');
 const b64=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
 function ask(t){m.textContent=t;f.hidden=false;}
-async function open(k){
- try{const key=await crypto.subtle.importKey('raw',b64(k),'AES-GCM',false,['decrypt']);
-  const r=await fetch(page+'.bin',{cache:'no-cache'});if(!r.ok)throw new Error('net');
-  const b=new Uint8Array(await r.arrayBuffer());
-  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b.subarray(0,12)},key,b.subarray(12));
-  try{localStorage.setItem('plankey',k)}catch(e){}
-  const html=new TextDecoder().decode(pt);document.open();document.write(html);document.close();
- }catch(e){ask(e.message==='net'?'Не удалось загрузить страницу: проверьте интернет.':'Ключ не подошёл. Откройте полную ссылку с ключом или вставьте ключ.');}
+async function tryKey(k){   // true — страница открыта, false — ключ не подошёл; Error('net') — сбой сети
+ let key;try{key=await crypto.subtle.importKey('raw',b64(k),'AES-GCM',false,['decrypt']);}catch(e){return false;}
+ let r;try{r=await fetch(page+'.bin',{cache:'no-cache'});}catch(e){throw new Error('net');}
+ if(!r.ok)throw new Error('net');
+ const b=new Uint8Array(await r.arrayBuffer());
+ let pt;try{pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b.subarray(0,12)},key,b.subarray(12));}catch(e){return false;}
+ try{localStorage.setItem('plankey',k)}catch(e){}
+ const html=new TextDecoder().decode(pt);document.open();document.write(html);document.close();return true;
 }
-f.onsubmit=e=>{e.preventDefault();const v=document.getElementById('k').value.trim();const k=(v.match(/k=([\w-]{40,})/)||[,v])[1];f.hidden=true;m.textContent='Загрузка…';open(k);};
-let k=(location.hash.match(/k=([\w-]{40,})/)||[])[1];
-if(!k){try{k=localStorage.getItem('plankey')}catch(e){}}
-if(k)open(k);else ask('Нужен ключ: откройте полную ссылку с ключом или вставьте его сюда.');
+// ключ из ссылки целиком, из «k=…» или просто 43 знака (лишние пробелы, кавычки, точки не мешают)
+const pick=v=>{v=(v||'').trim();const x=v.match(/k=([\w-]{40,})/);if(x)return x[1];const y=v.match(/[\w-]{43}/);return y?y[0]:'';};
+async function start(list){   // по очереди: ключ из ссылки, сохранённый в браузере; устаревший сохранённый — стираем
+ m.textContent='Загрузка…';f.hidden=true;list=[...new Set(list.filter(Boolean))];
+ try{for(const k of list){if(await tryKey(k))return;}}
+ catch(e){return ask('Не удалось загрузить страницу: проверьте интернет и нажмите «Открыть».');}
+ try{localStorage.removeItem('plankey')}catch(e){}
+ ask(list.length?'Ключ не подошёл. Вставьте сюда полную ссылку на план или ключ из неё (после «k=»).':'Нужен ключ: откройте полную ссылку с ключом или вставьте его сюда.');
+}
+f.onsubmit=e=>{e.preventDefault();start([pick(document.getElementById('k').value)]);};
+let saved='';try{saved=localStorage.getItem('plankey')||''}catch(e){}
+start([pick(location.hash),saved]);
 })();
 </script></body></html>
